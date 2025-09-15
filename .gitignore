@@ -2,3 +2,4 @@
 .vscode
 tmp/
 n8nEventLog*.log
+crash.journal

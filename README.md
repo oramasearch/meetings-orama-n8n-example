@@ -144,7 +144,7 @@ The **"Basic Meetings"** workflow includes a fully functional chat agent that ha
 - Leverages Orama Core's hybrid search capabilities
 - Processes utterances in contextual windows for better understanding
 - Maintains conversation history for follow-up questions
-- 
+
 ### Sample Data
 The repository includes sample meeting data in the `sample_dataset` directory:
 - `meetings.csv` - Full dataset with meeting transcripts

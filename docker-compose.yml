@@ -3,13 +3,21 @@ version: '3.8'
 services:
   config-processor:
     image: alpine:latest
-    command: sh -c "apk add --no-cache gettext && envsubst < /config/config-docker.yaml > /config/output/config-docker-processed.yaml"
+    command: sh -c "
+      apk add --no-cache gettext &&
+      mkdir -p /config/output &&
+      rm -f /config/output/config-docker-processed.yaml &&
+      touch /config/output/config-docker-processed.yaml &&
+      envsubst < /config/config-docker.yaml > /config/output/config-docker-processed.yaml &&
+      echo 'Config file created successfully' &&
+      ls -la /config/output/"
     volumes:
       - ./config-docker.yaml:/config/config-docker.yaml
       - ./tmp:/config/output
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - ORAMA_CORE_MASTER_API_KEY=${ORAMA_CORE_MASTER_API_KEY}
+    restart: "no"  # Don't restart this service
 
   n8n:
     image: n8nio/n8n:latest
@@ -23,10 +31,12 @@ services:
       - N8N_PROTOCOL=http
       - WEBHOOK_URL=http://localhost:5678/
       - GENERIC_TIMEZONE=UTC
+      - EXECUTIONS_DATA_PRUNE=true
       - N8N_BASIC_AUTH_ACTIVE=false
       - N8N_USER_MANAGEMENT_DISABLED=true
       - N8N_PERSONALIZATION_ENABLED=false
       - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
+      - DB_SQLITE_VACUUM_ON_STARTUP=true
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - ORAMA_CORE_MASTER_API_KEY=${ORAMA_CORE_MASTER_API_KEY}
       - ORAMA_CORE_COLLECTION_NAME=meetings_collection
@@ -39,6 +49,9 @@ services:
     networks:
       - n8n-network
       - oramacore-network
+    depends_on:
+      - config-processor
+
   oramacore:
     image: oramasearch/oramacore:latest
     deploy:
@@ -55,8 +68,12 @@ services:
     ports:
       - "8080:8080"
     depends_on:
-      - python-ai-server
-      # - vllm
+      config-processor:
+        condition: service_completed_successfully
+      python-ai-server:
+        condition: service_started
+      #vllm: 
+      #  condition: service_started
     networks:
       - oramacore-network
     restart: unless-stopped
@@ -77,6 +94,11 @@ services:
               count: 1
               capabilities: [ gpu ]
     restart: unless-stopped
+    depends_on:
+      config-processor:
+        condition: service_completed_successfully
+      #vllm: 
+      #  condition: service_started
 
   # vllm:
   #   image: vllm/vllm-openai:v0.8.3

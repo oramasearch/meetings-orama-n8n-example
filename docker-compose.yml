@@ -1,0 +1,103 @@
+version: '3.8'
+
+services:
+  config-processor:
+    image: alpine:latest
+    command: sh -c "apk add --no-cache gettext && envsubst < /config/config-docker.yaml > /config/output/config-docker-processed.yaml"
+    volumes:
+      - ./config-docker.yaml:/config/config-docker.yaml
+      - ./tmp:/config/output
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ORAMA_CORE_MASTER_API_KEY=${ORAMA_CORE_MASTER_API_KEY}
+
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - WEBHOOK_URL=http://localhost:5678/
+      - GENERIC_TIMEZONE=UTC
+      - N8N_BASIC_AUTH_ACTIVE=false
+      - N8N_USER_MANAGEMENT_DISABLED=true
+      - N8N_PERSONALIZATION_ENABLED=false
+      - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ORAMA_CORE_MASTER_API_KEY=${ORAMA_CORE_MASTER_API_KEY}
+      - ORAMA_CORE_COLLECTION_NAME=meetings_collection
+      - ORAMA_CORE_WRITER_URL=http://oramacore:8080
+      - ORAMA_CORE_COLLECTION_WRITE_KEY=reader-key
+      - ORAMA_CORE_READER_URL=http://oramacore:8080
+      - ORAMA_CORE_COLLECTION_READ_KEY=writer-key
+    volumes:
+      - ./n8n_store:/home/node/.n8n
+    networks:
+      - n8n-network
+      - oramacore-network
+  oramacore:
+    image: oramasearch/oramacore:latest
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [ gpu ]
+    environment:
+      - RUST_LOG=oramacore=trace,warn
+    volumes:
+      - ./tmp/config-docker-processed.yaml:/app/config.yaml
+    ports:
+      - "8080:8080"
+    depends_on:
+      - python-ai-server
+      # - vllm
+    networks:
+      - oramacore-network
+    restart: unless-stopped
+
+  python-ai-server:
+    image: oramasearch/oramacore-ai-server-cuda:latest
+    volumes:
+      - ./tmp/config-docker-processed.yaml:/config.yaml
+    ports:
+      - "50051:50051"
+    networks:
+      - oramacore-network
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [ gpu ]
+    restart: unless-stopped
+
+  # vllm:
+  #   image: vllm/vllm-openai:v0.8.3
+  #   command: --model Qwen/Qwen2.5-0.5B-Instruct --host 0.0.0.0 --port 8000 --enable-auto-tool-choice --tool-call-parser hermes
+  #   ports:
+  #     - "8000:8000"
+  #   environment:
+  #     - HF_TOKEN=${HF_TOKEN}
+  #   networks:
+  #     - oramacore-network
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: 1
+  #             capabilities: [ gpu ]
+  #   restart: unless-stopped
+
+networks:
+  n8n-network:
+    driver: bridge
+  oramacore-network:
+    driver: bridge

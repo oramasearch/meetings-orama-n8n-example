@@ -1,0 +1,404 @@
+{
+  "name": "RUN THIS FIRST Initialize Collections",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "// Loop over input items and add a new field called 'myNewField' to the JSON of each one\n\nreturn {\n  write_key: $env.ORAMA_CORE_COLLECTION_WRITE_KEY,\n  read_key:$env.ORAMA_CORE_COLLECTION_READ_KEY, \n  collection: $env.ORAMA_CORE_COLLECTION_NAME \n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1328,
+        -528
+      ],
+      "id": "d1684a18-e9fb-49b6-bd77-424f41ad667d",
+      "name": "Generate Api Keys"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ORAMA_CORE_WRITER_URL }}/v1/collections/{{ $json.collection_id }}/indexes/create",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Generate Api Keys').item.json.write_key }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "id",
+              "value": "meetings-summaries"
+            },
+            {
+              "name": "embedding",
+              "value": "automatic"
+            }
+          ]
+        },
+        "options": {
+          "redirect": {
+            "redirect": {}
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -320,
+        -576
+      ],
+      "id": "d5be27a6-e75a-4323-a3a2-ac7d67101d21",
+      "name": "Create meeting-summaries index"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ORAMA_CORE_WRITER_URL }}/v1/collections/create",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.ORAMA_CORE_MASTER_API_KEY}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "id",
+              "value": "={{ $('Generate Api Keys').item.json.collection }}"
+            },
+            {
+              "name": "language",
+              "value": "english"
+            },
+            {
+              "name": "read_api_key",
+              "value": "={{ $('Generate Api Keys').item.json.read_key }}"
+            },
+            {
+              "name": "write_api_key",
+              "value": "={{ $('Generate Api Keys').item.json.write_key }}"
+            }
+          ]
+        },
+        "options": {
+          "redirect": {
+            "redirect": {}
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -608,
+        -512
+      ],
+      "id": "f76e09a5-bab3-43af-9fae-ed7e2b2fb21f",
+      "name": "Create Colleciton"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -112,
+        -512
+      ],
+      "id": "eaee531f-00ef-441d-8132-a592d631745e",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "e94d08cd-9ca1-45c1-9cbd-01c3c5ede791",
+              "leftValue": "={{ $json.statusCode }}",
+              "rightValue": 200,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -976,
+        -528
+      ],
+      "id": "6bde0b21-9828-44c1-880c-621916bcb9b0",
+      "name": "Collection alredy exists"
+    },
+    {
+      "parameters": {
+        "url": "={{$env.ORAMA_CORE_WRITER_URL}}/v1/collections/meetings_collection",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.ORAMA_CORE_MASTER_API_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1152,
+        -528
+      ],
+      "id": "408b5f4c-4f53-4d51-a8f7-bbb47d7440e6",
+      "name": "Get collection"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.ORAMA_CORE_WRITER_URL}}/v1/collections/delete",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.ORAMA_CORE_MASTER_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "collection_id_to_delete",
+              "value": "={{ $('Generate Api Keys').item.json.collection }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -784,
+        -704
+      ],
+      "id": "de425b4e-58db-41c7-b069-d39f8a551a92",
+      "name": "Delete Previous Collection"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ORAMA_CORE_WRITER_URL }}/v1/collections/{{ $json.collection_id }}/indexes/create",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Generate Api Keys').item.json.write_key }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "id",
+              "value": "meetings-utterances"
+            },
+            {
+              "name": "embedding",
+              "value": "automatic"
+            }
+          ]
+        },
+        "options": {
+          "redirect": {
+            "redirect": {}
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -320,
+        -400
+      ],
+      "id": "bb44c04e-1c78-406f-8d61-e8de4fbcdfe4",
+      "name": "Create meetings-utterances index"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Loop over input items and add a new field called 'myNewField' to the JSON of each one\nconst s = $getWorkflowStaticData('global');\ns.orama_read_key = $('Generate Api Keys').first().json.read_key;\ns.orama_write_key = $('Generate Api Keys').first().json.write_key;\ns.collection_id = $('Generate Api Keys').first().json.collection\ns.meetings_summaries_index = \"meetings-summaries\"\ns.meetings_utterances_index = \"meetings-utterances\"\n\n\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        96,
+        -512
+      ],
+      "id": "64b7013c-8079-4ffa-8c86-905fbae0c9f9",
+      "name": "Set global vars"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1520,
+        -528
+      ],
+      "id": "97ae9910-d664-49a8-984d-863ff71cb4c1",
+      "name": "Reinitialize indexes"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Generate Api Keys": {
+      "main": [
+        [
+          {
+            "node": "Get collection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Colleciton": {
+      "main": [
+        [
+          {
+            "node": "Create meeting-summaries index",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Create meetings-utterances index",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create meeting-summaries index": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Set global vars",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collection alredy exists": {
+      "main": [
+        [
+          {
+            "node": "Delete Previous Collection",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create Colleciton",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get collection": {
+      "main": [
+        [
+          {
+            "node": "Collection alredy exists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete Previous Collection": {
+      "main": [
+        [
+          {
+            "node": "Create Colleciton",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create meetings-utterances index": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Reinitialize indexes": {
+      "main": [
+        [
+          {
+            "node": "Generate Api Keys",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "d8a16ef0-280b-4655-bf7c-8e4a517db966",
+  "meta": {
+    "instanceId": "26c11fbe07bbbbc831b29a2f7d28656e9f15e521e0284d472bfb167e7b4486c7"
+  },
+  "id": "a97Gias7gyzAdRbR",
+  "tags": []
+}

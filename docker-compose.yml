@@ -10,7 +10,8 @@ services:
       touch /config/output/config-docker-processed.yaml &&
       envsubst < /config/config-docker.yaml > /config/output/config-docker-processed.yaml &&
       echo 'Config file created successfully' &&
-      ls -la /config/output/"
+      ls -la /config/output/ &&
+      sleep 1"
     volumes:
       - ./config-docker.yaml:/config/config-docker.yaml
       - ./tmp:/config/output
@@ -55,21 +56,27 @@ services:
   oramacore:
     image: oramasearch/oramacore:latest
     environment:
+      - CONFIG_PATH=/app-config/config-docker-processed.yaml
       - RUST_LOG=oramacore=trace,warn
     volumes:
-      - ./tmp/config-docker-processed.yaml:/app/config.yaml
+      - ./tmp:/app-config
     ports:
       - "8080:8080"
     depends_on:
-      - python-ai-server
+      python-ai-server:
+        condition: service_started
+      config-processor:
+        condition: service_completed_successfully
     networks:
       - oramacore-network
     restart: unless-stopped
 
   python-ai-server:
     image: oramasearch/oramacore-ai-server:latest
+    environment:
+      - CONFIG_PATH=/app-config/config-docker-processed.yaml
     volumes:
-      - ./tmp/config-docker-processed.yaml:/config.yaml
+      - ./tmp:/app-config
     ports:
       - "50051:50051"
     networks:

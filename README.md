@@ -6,7 +6,6 @@ This repository demonstrates how to use n8n workflows with Orama Core to ingest 
 
 ### System Requirements
 - **Docker** and **Docker Compose** installed on your system
-- **NVIDIA GPU** with CUDA support (required for AI services)
 - **Git** for cloning the repository
 
 ### API Keys Required

@@ -6,7 +6,7 @@ services:
     command: sh -c "
       apk add --no-cache gettext &&
       mkdir -p /config/output &&
-      rm -f /config/output/config-docker-processed.yaml &&
+      rm -rf /config/output/config-docker-processed.yaml &&
       touch /config/output/config-docker-processed.yaml &&
       envsubst < /config/config-docker.yaml > /config/output/config-docker-processed.yaml &&
       echo 'Config file created successfully' &&

@@ -5,8 +5,8 @@ This repository demonstrates how to use n8n workflows with Orama Core to ingest 
 ## Requirements
 
 ### System Requirements
-- **Docker** and **Docker Compose** installed on your system
 - **Git** for cloning the repository
+- **Docker** and **Docker Compose** installed on your system
 
 ### API Keys Required
 You'll need the following API keys:
@@ -26,7 +26,7 @@ Create a `.env` file in the root directory with your API keys:
 
 ```bash
 # Copy the example file
-cp .env.example .env
+cp example.env .env
 ```
 
 Edit the `.env` file and add your API keys:
@@ -52,16 +52,21 @@ This will start:
 - **Config Processor** (environment variable processing)
 
 ### 4. Access n8n Interface
+
 Once the services are running, you can access the n8n interface at:
 
-**http://localhost:5678**
+**🔗 http://localhost:5678**
+
+#### Login Credentials
+- **Username**: `test@example.com`
+- **Password**: `Test1234`
 
 ## Workflow Usage
 
 ### Initialize Flow (Required First Step)
 **⚠️ Important**: You must run the Initialize flow first before using any other workflows.
 
-1. In the n8n interface, find and open the **"Initialize"** workflow
+1. In the n8n interface, find and open the **"RUN THIS FIRST Initialize Collections"** workflow
 2. Click **"Execute Workflow"** to run it
 3. This workflow will:
    - Create the meetings collection in Orama Core

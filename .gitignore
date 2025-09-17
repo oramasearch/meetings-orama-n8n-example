@@ -2,3 +2,5 @@
 .vscode
 tmp/
 n8nEventLog*.log
+n8n_store.bak
+n8n_store

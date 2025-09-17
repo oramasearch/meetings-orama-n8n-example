@@ -41,13 +41,6 @@ services:
       - oramacore-network
   oramacore:
     image: oramasearch/oramacore:latest
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [ gpu ]
     environment:
       - RUST_LOG=oramacore=trace,warn
     volumes:
@@ -56,45 +49,19 @@ services:
       - "8080:8080"
     depends_on:
       - python-ai-server
-      # - vllm
     networks:
       - oramacore-network
     restart: unless-stopped
 
   python-ai-server:
-    image: oramasearch/oramacore-ai-server-cuda:latest
+    image: oramasearch/oramacore-ai-server:latest
     volumes:
       - ./tmp/config-docker-processed.yaml:/config.yaml
     ports:
       - "50051:50051"
     networks:
       - oramacore-network
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [ gpu ]
     restart: unless-stopped
-
-  # vllm:
-  #   image: vllm/vllm-openai:v0.8.3
-  #   command: --model Qwen/Qwen2.5-0.5B-Instruct --host 0.0.0.0 --port 8000 --enable-auto-tool-choice --tool-call-parser hermes
-  #   ports:
-  #     - "8000:8000"
-  #   environment:
-  #     - HF_TOKEN=${HF_TOKEN}
-  #   networks:
-  #     - oramacore-network
-  #   deploy:
-  #     resources:
-  #       reservations:
-  #         devices:
-  #           - driver: nvidia
-  #             count: 1
-  #             capabilities: [ gpu ]
-  #   restart: unless-stopped
 
 networks:
   n8n-network:

@@ -4,3 +4,4 @@ tmp/
 n8nEventLog*.log
 crash.journal
 n8n_store.bak
+hf_datasets/

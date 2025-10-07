@@ -1,0 +1,570 @@
+{
+  "name": "Data Ingestion",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Submit CSV",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "CSV",
+              "fieldType": "file",
+              "multipleFiles": false,
+              "acceptFileTypes": ".csv",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Generate summaries",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Includes summary in \"Summary\" field"
+                  },
+                  {
+                    "option": "Generate summary (10-20k tokens/meeting)"
+                  }
+                ]
+              },
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.3,
+      "position": [
+        -992,
+        -112
+      ],
+      "id": "9e96190e-8cb6-44a7-843a-bd2dfb6f26ec",
+      "name": "On form submission",
+      "webhookId": "46feb9b1-279b-4b60-af82-8f843177a216"
+    },
+    {
+      "parameters": {
+        "binaryPropertyName": "CSV",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        -800,
+        -112
+      ],
+      "id": "40a27131-8dba-47c3-8188-809d4b0374e3",
+      "name": "Extract from File"
+    },
+    {
+      "parameters": {
+        "jsCode": "const finalArray = [];\nlet chunk = []\nconst chunkSize = 100;\n\nfor (const item of $input.all()) {\n  const data = item.json;\n  chunk.push({\n    id: `${data['Meeting_UID']}`,\n    summary: data['Summary'],\n    date: data['Date'],\n    meeting_item: data['Item_UID'],\n    [\"Meeting Uid\"]: data['Meeting_UID']\n\n  });\n  if (chunk.length >= chunkSize) {\n    finalArray.push({ data: chunk });\n    chunk = [];\n  }\n}\n\nif (chunk.length) {\n  finalArray.push({ data: chunk });\n}\n\nreturn finalArray;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -16,
+        -288
+      ],
+      "id": "c18575f4-2296-4edd-bc96-56a3440a6f79",
+      "name": "Extract Meeting summary"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{\t$env.ORAMA_CORE_WRITER_URL }}/v1/collections/{{$env.ORAMA_CORE_COLLECTION_NAME}}/indexes/meetings-summaries/insert",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.ORAMA_CORE_COLLECTION_WRITE_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.data) }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 0,
+              "batchInterval": 500
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        704,
+        -288
+      ],
+      "id": "c64044c7-141a-4727-971d-361670269196",
+      "name": "Save into Meetings"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{\t$env.ORAMA_CORE_WRITER_URL }}/v1/collections/{{$env.ORAMA_CORE_COLLECTION_NAME}}/indexes/meetings-utterances/insert",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.ORAMA_CORE_COLLECTION_WRITE_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.data) }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 0,
+              "batchInterval": 50
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        608,
+        352
+      ],
+      "id": "963494d4-7054-4cf6-9111-24d239c8c68a",
+      "name": "Save meeting utterances"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        960,
+        -16
+      ],
+      "id": "7944d7c3-e971-4304-8b4a-c2350ce37563",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "jsCode": "const finalArray = [];\nlet chunk = []\nconst chunkSize = 50;\n\nfor (const item of $input.all()) {\n  const data = item.json;\n  const contextSize = 1;\n  const normalized = data.Transcript.replace(/\\r\\n/g, '\\n').replace(/\\r/g, '\\n');\n  const split = normalized.split('\\n').filter(line => line.trim() !== '');\n\n  // strict mode: require enough lines for full window\n  if (split.length < 2 * contextSize + 1) {\n    // either skip completely (strict)\n    // continue;\n\n    // OR fallback: make one snippet with whatever lines exist (flexible)\n    chunk.push({\n      id: data['Meeting_UID'],\n      snippet: split.join(\"\\n\"),\n      date: data['Date'],\n      start: 0,\n      end: split.length\n    });\n  } else {\n    for (let idx = contextSize; idx < split.length - contextSize; idx++) {\n      const start = idx - contextSize;\n      const end = idx + contextSize + 1;\n\n      const contextWindow = split.slice(start, end);\n\n      chunk.push({\n        id: `${data['Meeting_UID']}-${start}-${end}`,\n        meeting_id: data['Meeting_UID'],\n        snippet: contextWindow.join(\"\\n\"),\n        start,\n        end\n      });\n\n      if (chunk.length >= chunkSize) {\n        finalArray.push({ data: chunk });\n        chunk = [];\n      }\n    }\n  }\n}\n\nif (chunk.length) {\n  finalArray.push({ data: chunk });\n}\n\nreturn finalArray;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        352
+      ],
+      "id": "379a63ec-c6ec-4827-8c98-b4933ed81208",
+      "name": "Extract Meeting utterances",
+      "notes": "Edit variable contextSize to change how many utterances overlap"
+    },
+    {
+      "parameters": {
+        "batchSize": 2,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        160,
+        256
+      ],
+      "id": "12e0b18c-ce81-4e55-a587-6aff618c399f",
+      "name": "Loop over meetings"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1152,
+        -16
+      ],
+      "id": "03b909b1-8af8-441d-a687-865ba0ecd724",
+      "name": "No Operation, do nothing"
+    },
+    {
+      "parameters": {
+        "chunkSize": 10000,
+        "chunkOverlap": 400,
+        "options": {
+          "summarizationMethodAndPrompts": {
+            "values": {
+              "combineMapPrompt": "Bellow is a part of a meeting transcript, write a concise summary, include any final decision made and action point, and summarize topics talked about, if you can attempt to figure out participants of the meeting.\n\n\n\"{text}\"\n\n\nCONCISE SUMMARY:",
+              "prompt": "Bellow is summaries of partial meeting transcripts, write the final summary, and include any final decisions and action points made and summarise the topics talked about. Include base meeting information, and participants if possible. The final summary should not contain too many words that would repeat over different meetings.\n\n\n\"{text}\"\n\n\nCONCISE SUMMARY (Do not say anything additional, simply respond with only the summary):"
+            }
+          }
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainSummarization",
+      "typeVersion": 2.1,
+      "position": [
+        160,
+        -96
+      ],
+      "id": "ae252175-14bd-458f-8e51-a7531840608b",
+      "name": "Summarization Chain",
+      "notesInFlow": true,
+      "notes": "Tweak the summarization prompt and select appropriate model with best results and acceptable cost!"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-3.5-turbo",
+          "mode": "list",
+          "cachedResultName": "gpt-3.5-turbo"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        160,
+        96
+      ],
+      "id": "718512a1-6357-45dd-804e-9f7973197d1d",
+      "name": "OpenAI Chat Model1",
+      "credentials": {
+        "openAiApi": {
+          "id": "ORQ4FsXP6AiWfQo7",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "5f832ea7-ae6f-425f-8211-c760da3c04f9",
+              "leftValue": "Summary",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "98eeab35-0581-426c-a81b-ad4658ff8e5a",
+              "leftValue": "Summary",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "f373ea0b-28bf-4af9-9469-ff6939b50c95",
+              "leftValue": "={{ $('On form submission').item.json['Generate summaries'] }}",
+              "rightValue": "Generate summary (10-20k tokens/meeting)",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -272,
+        -96
+      ],
+      "id": "d854f790-ec3b-46ac-acef-5bbdc9293dd1",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "errorMessage": "Summaries are required! Either add them to data or enable the summary flow"
+      },
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        -416,
+        -288
+      ],
+      "id": "7af0de93-254e-45cc-8149-e9e27228a12e",
+      "name": "Stop and Error"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "96be1db8-1169-479a-b412-279c4615f7d2",
+              "leftValue": "={{ $('On form submission').item.json['Generate summaries'] }}",
+              "rightValue": "Includes summary in \"Summary\" field",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            },
+            {
+              "id": "ed6645f4-1ea9-4125-8c84-dea4433ac546",
+              "leftValue": "={{ $json.Summary }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "empty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -608,
+        -112
+      ],
+      "id": "3e916fcc-21cd-49ba-b3d9-8ed232653fd0",
+      "name": "Lacks summary and Generate directive"
+    },
+    {
+      "parameters": {
+        "jsCode": "const finalArray = [];\nlet chunk = []\nconst chunkSize = 100;\n// $input.first().json.output.text\nconst meetingsInfo = $('Extract Transcript').all()\nlet idx = 0\nfor (const item of $input.all()) {\n  const data = item.json;\n  const meetingInfo = meetingsInfo[idx].json\n  chunk.push({\n    id: meetingInfo['Meeting_UID'],\n    summary: data?.output?.text,\n    date: meetingInfo['Date'],\n    meeting_item: meetingInfo['Item_UID'],\n    [\"Meeting Uid\"]: meetingInfo['Meeting_UID']\n\n  });\n  if (chunk.length >= chunkSize) {\n    finalArray.push({ data: chunk });\n    chunk = [];\n  }\n  idx++\n}\n\nif (chunk.length) {\n  finalArray.push({ data: chunk });\n}\n\nreturn finalArray;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        -96
+      ],
+      "id": "1866d2e6-0822-4101-b94f-8cf4ffd4c669",
+      "name": "Map summary meeting item"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Add a new field called 'myNewField' to the JSON of the item\n\n\nreturn {\n  Meeting_UID: $json.Meeting_UID,\n  Date: $json.Date,\n  Transcript:$json.Transcript\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -16,
+        -96
+      ],
+      "id": "7cb604a2-4142-4b43-bfa4-2f97bad52e60",
+      "name": "Extract Transcript"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "On form submission": {
+      "main": [
+        [
+          {
+            "node": "Extract from File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File": {
+      "main": [
+        [
+          {
+            "node": "Lacks summary and Generate directive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Meeting summary": {
+      "main": [
+        [
+          {
+            "node": "Save into Meetings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save into Meetings": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save meeting utterances": {
+      "main": [
+        [
+          {
+            "node": "Loop over meetings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "No Operation, do nothing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Meeting utterances": {
+      "main": [
+        [
+          {
+            "node": "Save meeting utterances",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop over meetings": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ],
+        [
+          {
+            "node": "Extract Meeting utterances",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarization Chain": {
+      "main": [
+        [
+          {
+            "node": "Map summary meeting item",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Summarization Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Extract Meeting summary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract Transcript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lacks summary and Generate directive": {
+      "main": [
+        [
+          {
+            "node": "Stop and Error",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Loop over meetings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map summary meeting item": {
+      "main": [
+        [
+          {
+            "node": "Save into Meetings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Transcript": {
+      "main": [
+        [
+          {
+            "node": "Summarization Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "3f02a6fe-5c06-404d-9670-5a867da146a9",
+  "meta": {
+    "instanceId": "56b4091ad2abd96c55c3a446d28b5692d77cd641089abc6986ee4c210ee9a6af"
+  },
+  "id": "bKxibeRCeXo89IaH",
+  "tags": []
+}
